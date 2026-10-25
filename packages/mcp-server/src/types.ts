@@ -27,6 +27,8 @@ export interface PlatformInfo {
   icon: string
   homepage: string
   isAuthenticated: boolean
+  capabilities?: string[]
+  syncMode?: 'api' | 'editor' | 'hybrid'
   username?: string
   avatar?: string
   error?: string
@@ -42,6 +44,8 @@ export interface Article {
   category?: string
 }
 
+export type SyncOutcome = 'editor_filled' | 'draft_saved' | 'published' | 'needs_user_action' | 'failed'
+
 // 同步结果
 export interface SyncResult {
   platform: string
@@ -49,8 +53,18 @@ export interface SyncResult {
   postId?: string
   postUrl?: string
   draftOnly?: boolean
+  outcome?: SyncOutcome
+  editorUrl?: string
+  tabId?: number
+  warnings?: string[]
+  message?: string
   error?: string
   timestamp: number
+}
+
+export interface SyncArticleResponse {
+  results: SyncResult[]
+  syncId: string
 }
 
 // Extension 支持的方法

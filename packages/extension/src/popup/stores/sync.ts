@@ -1,3 +1,4 @@
+import type { SyncOutcome } from '@wechatsync/core'
 import { create } from 'zustand'
 import {
   trackRetry,
@@ -10,6 +11,7 @@ import {
 } from '../../lib/analytics'
 import { checkSyncFrequency } from '../../lib/rate-limit'
 import { createLogger } from '../../lib/logger'
+import { isFailedResult } from '../../lib/sync-result'
 
 const logger = createLogger('SyncStore')
 
@@ -69,8 +71,13 @@ interface SyncResult {
   platform: string
   platformName?: string
   success: boolean
+  outcome?: SyncOutcome
+  editorUrl?: string
+  tabId?: number
+  warnings?: string[]
   postUrl?: string
   draftOnly?: boolean
+  message?: string
   error?: string
 }
 
@@ -81,7 +88,7 @@ interface ImageProgress {
 }
 
 // 同步阶段类型
-type SyncStage = 'starting' | 'uploading_images' | 'saving' | 'completed' | 'failed'
+type SyncStage = 'starting' | 'uploading_images' | 'saving' | 'completed' | 'pending' | 'failed'
 
 // 平台同步详细进度
 interface PlatformProgress {
@@ -451,7 +458,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       })
 
       // 追踪流失预警：多次失败
-      const failedCount = resultsWithNames.filter((r: SyncResult) => !r.success).length
+      const failedCount = resultsWithNames.filter(isFailedResult).length
       if (failedCount >= 3) {
         trackChurnSignal('multiple_failures', {
           failed_count: failedCount,
@@ -480,14 +487,14 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     }
 
     // 获取失败的平台
-    const failedPlatformIds = results.filter(r => !r.success).map(r => r.platform)
+    const failedPlatformIds = results.filter(isFailedResult).map(r => r.platform)
 
     if (failedPlatformIds.length === 0) {
       return
     }
 
-    // 保留成功的结果
-    const successResults = results.filter(r => r.success)
+    // 保留成功和待用户保存的结果
+    const retainedResults = results.filter(r => !isFailedResult(r))
 
     // 追踪重试行为
     trackRetry('popup', failedPlatformIds, 2, failedPlatformIds.length).catch(() => {})
@@ -495,7 +502,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     // 生成新的 syncId
     const syncId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
-    set({ status: 'syncing', results: successResults, error: null, imageProgress: null, platformProgress: new Map(), currentSyncId: syncId })
+    set({ status: 'syncing', results: retainedResults, error: null, imageProgress: null, platformProgress: new Map(), currentSyncId: syncId })
 
     try {
       // SYNC_ARTICLE 现在同时处理 DSL 和 CMS 平台
@@ -512,7 +519,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         platformName: r.platformName || platforms.find(p => p.id === r.platform)?.name || r.platform,
       }))
 
-      const allResults = [...successResults, ...retryResultsWithNames]
+      const allResults = [...retainedResults, ...retryResultsWithNames]
 
       // 更新历史记录中最新的条目 - 从 storage 读取
       const storage = await chrome.storage.local.get('syncHistory')

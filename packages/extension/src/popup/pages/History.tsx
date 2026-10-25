@@ -4,6 +4,8 @@ import { ArrowLeft, CheckCircle, XCircle, ExternalLink, Clock, Trash2, ImageIcon
 import { useSyncStore } from '../stores/sync'
 import { Button } from '../components/ui/Button'
 import { trackPageView } from '../../lib/analytics'
+import { EditorLink } from '../../components/sync-dialog/EditorLink'
+import { isFailedResult, isPendingResult, isSuccessfulResult, summarizeSyncResults } from '../../lib/sync-result'
 
 export function HistoryPage() {
   const navigate = useNavigate()
@@ -93,8 +95,7 @@ export function HistoryPage() {
       <div className="flex-1 overflow-auto space-y-3">
         {history.map((item) => {
           const results = item.results || []
-          const successCount = results.filter(r => r.success).length
-          const failedCount = results.filter(r => !r.success).length
+          const { success: successCount, pending: pendingCount, failed: failedCount } = summarizeSyncResults(results)
 
           return (
             <div
@@ -145,6 +146,12 @@ export function HistoryPage() {
                           <CheckCircle className="w-3.5 h-3.5" />
                           <span>{successCount} 成功</span>
                         </div>
+                        {pendingCount > 0 && (
+                          <div className="flex items-center gap-1 text-amber-600">
+                            <Clock className="w-3.5 h-3.5" />
+                            <span>{pendingCount} 待保存</span>
+                          </div>
+                        )}
                         {failedCount > 0 && (
                           <div className="flex items-center gap-1 text-red-600">
                             <XCircle className="w-3.5 h-3.5" />
@@ -162,24 +169,26 @@ export function HistoryPage() {
                         key={result.platform}
                         className={`
                           inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs
-                          ${result.success
-                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                            : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          ${isPendingResult(result)
+                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
+                            : isSuccessfulResult(result)
+                              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                              : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                           }
                         `}
-                        title={!result.success && result.error ? result.error : undefined}
+                        title={[result.message, result.error, ...(result.warnings || [])].filter(Boolean).join('；') || undefined}
                       >
                         <span>{result.platformName || result.platform}</span>
-                        {!result.success && result.error && (
+                        {isFailedResult(result) && result.error && (
                           <span className="opacity-60 truncate max-w-[80px]">: {result.error}</span>
                         )}
-                        {result.postUrl && (
+                        {result.editorUrl ? <EditorLink result={result} /> : result.postUrl && (
                           <a
                             href={result.postUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="hover:opacity-70"
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={event => event.stopPropagation()}
                           >
                             <ExternalLink className="w-3 h-3" />
                           </a>
@@ -187,6 +196,12 @@ export function HistoryPage() {
                       </div>
                     ))}
                   </div>
+                  {results.filter(isPendingResult).map(result => (
+                    <p key={result.platform} className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                      {result.platformName || result.platform}：{result.message || '请打开编辑器并保存草稿'}
+                      {result.warnings?.length ? `；${result.warnings.join('；')}` : ''}
+                    </p>
+                  ))}
                 </div>
               </div>
             </div>

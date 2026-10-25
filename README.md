@@ -76,6 +76,9 @@
 | 开源中国 | oschina | 技术社区 | ✅ |
 | SegmentFault | segmentfault | 技术社区 | ✅ |
 | 博客园 | cnblogs | 技术社区 | ✅ |
+| 腾讯云开发者社区 | tencentcloud | 技术社区 | 填入编辑器，需手动保存 |
+| 阿里云开发者社区 | aliyun | 技术社区 | 填入编辑器，需手动保存 |
+| 华为云开发者博客 | huaweicloud | 技术社区 | 填入编辑器，需手动保存 |
 | 搜狐焦点 | sohufocus | 房产 | ✅ |
 | X (Twitter) | x | 海外 | ✅ |
 | 东方财富 | eastmoney | 财经 | ✅ |
@@ -85,6 +88,8 @@
 | Typecho | typecho | 建站/CMS | ✅ |
 | Hexo | zip-download | 建站/CMS | ✅ 通过 Markdown 下载 |
 | Hugo | zip-download | 建站/CMS | ✅ 通过 Markdown 下载 |
+
+腾讯云、阿里云、华为云需要先在浏览器登录。同步会打开新的投稿页面并填入标题和正文，结果显示“待保存”；请在该编辑器页面检查排版、图片转存并手动保存草稿。填入编辑器不代表已保存或已发布，图片仍需核对是否已转存到目标平台。CLI/MCP 返回 `editor_filled` 和 `editorUrl` 时也需要完成这一步。
 
 - [提交新平台请求](https://airtable.com/shrLSJMnTC2BlmP29)
 

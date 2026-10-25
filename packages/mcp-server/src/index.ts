@@ -17,7 +17,7 @@ import express, { type Request, type Response } from 'express'
 import fs from 'fs'
 import path from 'path'
 import { ExtensionBridge } from './ws-bridge.js'
-import type { PlatformInfo, SyncResult } from './types.js'
+import type { PlatformInfo, SyncArticleResponse } from './types.js'
 
 const WS_PORT = parseInt(process.env.SYNC_WS_PORT || '9527', 10)
 const HTTP_PORT = parseInt(process.env.SYNC_HTTP_PORT || '9528', 10)
@@ -77,7 +77,7 @@ function createServer(): Server {
         },
         {
           name: 'sync_article',
-          description: '同步文章到指定平台（保存为草稿）。支持 Markdown 或 HTML 格式，优先使用 markdown 字段。重要：如果文章包含本地图片引用，必须先读取图片文件并转换为 base64 data URI 格式（如 ![img](data:image/png;base64,xxx)）。',
+          description: '同步文章到指定平台。腾讯云、阿里云、华为云会填入编辑器，返回 editor_filled/needs_user_action 时尚未保存，需用户在 editorUrl 对应页面检查并保存草稿，请按 outcome、message 和 warnings 判断实际完成程度。支持 Markdown 或 HTML 格式，优先使用 markdown 字段。重要：如果文章包含本地图片引用，必须先读取图片文件并转换为 base64 data URI 格式（如 ![img](data:image/png;base64,xxx)）。',
           inputSchema: {
             type: 'object',
             properties: {
@@ -172,7 +172,7 @@ function createServer(): Server {
           break
 
         case 'sync_article':
-          result = await bridge.request<SyncResult[]>('syncArticle', {
+          result = await bridge.request<SyncArticleResponse>('syncArticle', {
             platforms: (args as { platforms: string[] }).platforms,
             article: {
               title: (args as { title: string }).title,

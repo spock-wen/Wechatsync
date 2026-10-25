@@ -1,9 +1,11 @@
+import type { SyncOutcome } from '@wechatsync/core'
 export interface Platform {
   id: string
   name: string
   icon: string
   homepage?: string
   isAuthenticated: boolean
+  syncMode?: 'api' | 'editor' | 'hybrid'
   username?: string
 }
 
@@ -18,13 +20,17 @@ export interface SyncResult {
   platform: string
   platformName?: string
   success: boolean
+  outcome?: SyncOutcome
+  editorUrl?: string
+  tabId?: number
+  warnings?: string[]
   postUrl?: string
   draftOnly?: boolean
   message?: string
   error?: string
 }
 
-export type SyncStage = 'starting' | 'uploading_images' | 'saving' | 'completed' | 'failed'
+export type SyncStage = 'starting' | 'uploading_images' | 'saving' | 'completed' | 'pending' | 'failed'
 
 export interface PlatformProgress {
   platform: string

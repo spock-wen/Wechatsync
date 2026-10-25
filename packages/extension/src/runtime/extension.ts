@@ -212,20 +212,35 @@ export class ExtensionRuntime implements RuntimeInterface {
 
     async waitForLoad(tabId: number, timeout = 30000): Promise<void> {
       return new Promise((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
+        let settled = false
+        const cleanup = () => {
+          clearTimeout(timeoutId)
           chrome.tabs.onUpdated.removeListener(listener)
-          reject(new Error('Tab load timeout'))
-        }, timeout)
-
+          chrome.tabs.onRemoved.removeListener(onRemoved)
+        }
+        const finish = (error?: Error) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          if (error) reject(error)
+          else resolve()
+        }
         const listener = (updatedTabId: number, info: chrome.tabs.TabChangeInfo) => {
           if (updatedTabId === tabId && info.status === 'complete') {
-            clearTimeout(timeoutId)
-            chrome.tabs.onUpdated.removeListener(listener)
-            // 额外等待让页面 JS 初始化
-            setTimeout(resolve, 1000)
+            finish()
           }
         }
+        const onRemoved = (removedTabId: number) => {
+          if (removedTabId === tabId) finish(new Error('投稿标签页已关闭'))
+        }
+        const timeoutId = setTimeout(() => finish(new Error('Tab load timeout')), timeout)
         chrome.tabs.onUpdated.addListener(listener)
+        chrome.tabs.onRemoved.addListener(onRemoved)
+        // Register listeners first so a fast load cannot complete between the
+        // status read and event subscription.
+        chrome.tabs.get(tabId).then(tab => {
+          if (tab.status === 'complete') finish()
+        }).catch(error => finish(error instanceof Error ? error : new Error('无法读取投稿标签页')))
       })
     },
 
@@ -241,8 +256,10 @@ export class ExtensionRuntime implements RuntimeInterface {
         args: args as unknown[],
       })
 
-      const result = results[0]?.result as T
-      return result
+      if (!results.length) {
+        throw new Error('页面脚本未返回结果，请检查编辑器页面是否已就绪')
+      }
+      return results[0].result as T
     },
   }
 

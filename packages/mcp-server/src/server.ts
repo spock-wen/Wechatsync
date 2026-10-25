@@ -12,7 +12,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 import express, { type Request, type Response } from 'express'
 import { ExtensionBridge } from './ws-bridge.js'
-import type { PlatformInfo, SyncResult } from './types.js'
+import type { PlatformInfo, SyncArticleResponse } from './types.js'
 
 export class SyncAssistantMcpServer {
   private server: Server
@@ -128,7 +128,7 @@ export class SyncAssistantMcpServer {
           },
           {
             name: 'sync_article',
-            description: '同步文章到指定平台（保存为草稿）',
+            description: '同步文章到指定平台。腾讯云、阿里云、华为云会填入编辑器，返回 editor_filled/needs_user_action 时尚未保存，需用户在 editorUrl 对应页面检查并保存草稿，请按 outcome、message 和 warnings 判断实际完成程度',
             inputSchema: {
               type: 'object',
               properties: {
@@ -205,7 +205,7 @@ export class SyncAssistantMcpServer {
             break
 
           case 'sync_article':
-            result = await this.bridge.request<SyncResult[]>('syncArticle', {
+            result = await this.bridge.request<SyncArticleResponse>('syncArticle', {
               platforms: (args as { platforms: string[] }).platforms,
               article: {
                 title: (args as { title: string }).title,

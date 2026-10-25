@@ -10,6 +10,7 @@ import {
 } from '@wechatsync/core'
 import { createExtensionRuntime } from '../runtime/extension'
 import { createLogger } from '../lib/logger'
+import { isPendingResult, isSuccessfulResult, summarizeSyncResults } from '../lib/sync-result'
 import {
   trackSyncStart,
   trackPlatformSync,
@@ -43,6 +44,9 @@ import {
   CnblogsAdapter,
   ZipDownloadAdapter,
   EastmoneyAdapter,
+  TencentCloudAdapter,
+  AliyunAdapter,
+  HuaweiCloudAdapter,
 } from '@wechatsync/core'
 
 // 私有适配器 - private/ 目录通过 git submodule 管理
@@ -97,6 +101,9 @@ const ADAPTER_CLASSES: AdapterConstructor[] = [
   CnblogsAdapter,
   ZipDownloadAdapter,
   EastmoneyAdapter,
+  TencentCloudAdapter,
+  AliyunAdapter,
+  HuaweiCloudAdapter,
   ...getPrivateAdapters(),
 ]
 
@@ -371,7 +378,7 @@ export type ImageProgressCallback = (platform: string, current: number, total: n
 /**
  * 同步阶段类型
  */
-export type SyncStage = 'starting' | 'uploading_images' | 'saving' | 'completed' | 'failed'
+export type SyncStage = 'starting' | 'uploading_images' | 'saving' | 'completed' | 'pending' | 'failed'
 
 /**
  * 详细同步进度类型
@@ -573,7 +580,7 @@ export async function syncToMultiplePlatforms(
     callbacks?.onDetailProgress?.({
       platform: platformId,
       platformName,
-      stage: result.success ? 'completed' : 'failed',
+      stage: isPendingResult(result) ? 'pending' : isSuccessfulResult(result) ? 'completed' : 'failed',
       result,
       error: result.error,
     })
@@ -582,7 +589,7 @@ export async function syncToMultiplePlatforms(
 
     // 追踪单个平台同步结果
     const platformDuration = Date.now() - platformStartTime
-    trackPlatformSync(source, platformId, result.success, {
+    if (!isPendingResult(result)) trackPlatformSync(source, platformId, isSuccessfulResult(result), {
       draftOnly: result.draftOnly,
       errorType: result.error ? inferErrorType(result.error) : undefined,
       duration: platformDuration,
@@ -619,13 +626,13 @@ export async function syncToMultiplePlatforms(
   syncAbortController = null
 
   // 追踪同步完成
-  const successCount = results.filter(r => r.success).length
+  const { success: successCount, failed: failedCount } = summarizeSyncResults(results)
   const cancelledCount = results.filter(r => r.error === '已取消').length
   trackSyncComplete({
     source,
     total: results.length,
     success: successCount,
-    failed: results.length - successCount - cancelledCount,
+    failed: failedCount - cancelledCount,
     platforms: platformIds,
     duration: Date.now() - startTime,
   }).catch(() => {})

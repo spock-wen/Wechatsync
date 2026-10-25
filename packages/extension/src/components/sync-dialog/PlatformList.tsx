@@ -1,6 +1,8 @@
-import { Check, X, Loader2, ExternalLink, ChevronRight } from 'lucide-react'
+import { Check, X, Loader2, ExternalLink, ChevronRight, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { isFailedResult, isPendingResult, isSuccessfulResult, summarizeSyncResults } from '@/lib/sync-result'
 import type { Platform, SyncResult, PlatformProgress, DialogStatus } from './types'
+import { EditorLink } from './EditorLink'
 
 interface PlatformListProps {
   platforms: Platform[]
@@ -31,8 +33,7 @@ export function PlatformList({
   const authenticatedPlatforms = platforms.filter(p => p.isAuthenticated)
   const unauthenticatedPlatforms = platforms.filter(p => !p.isAuthenticated)
   const selectedCount = selected.size
-  const successCount = results.filter(r => r.success).length
-  const failedCount = results.filter(r => !r.success).length
+  const { success: successCount, pending: pendingCount, failed: failedCount } = summarizeSyncResults(results)
 
   // 按阶段加权计算进度：只同步一个平台时，完成前也能看到在推进，而不是一直停在 0%
   const stageWeight = (id: string) => {
@@ -43,7 +44,7 @@ export function PlatformList({
       const { current = 0, total = 0 } = p.imageProgress || {}
       return 0.1 + (total > 0 ? 0.6 * (current / total) : 0)
     }
-    return { starting: 0.1, saving: 0.85, completed: 1, failed: 1 }[p.stage]
+    return { starting: 0.1, saving: 0.85, completed: 1, pending: 1, failed: 1 }[p.stage]
   }
   const progressPercent = selectedPlatforms.length > 0
     ? (selectedPlatforms.reduce((sum, id) => sum + stageWeight(id), 0) / selectedPlatforms.length) * 100
@@ -92,12 +93,17 @@ export function PlatformList({
         {isFinished && (
           <>
             <span className="text-sm font-medium">
-              {status === 'completed' ? '同步完成' : status === 'failed' ? '同步失败' : '已取消'}
+              {status === 'completed' ? (pendingCount > 0 ? '内容已填入，请保存草稿' : '同步完成') : status === 'failed' ? '同步失败' : '已取消'}
             </span>
             <div className="flex items-center gap-2">
               {successCount > 0 && (
                 <span className="inline-flex items-center gap-0.5 text-xs text-green-600">
                   <Check className="w-3 h-3" />{successCount}
+                </span>
+              )}
+              {pendingCount > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-xs text-amber-600">
+                  <Clock className="w-3 h-3" />{pendingCount} 待保存
                 </span>
               )}
               {failedCount > 0 && (
@@ -193,12 +199,13 @@ function PlatformRow({
     <div
       onClick={handleClick}
       className={cn(
-        'flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-200',
+        'flex flex-wrap items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-200',
         isIdle && platform.isAuthenticated && 'cursor-pointer hover:bg-muted/60',
         isIdle && !platform.isAuthenticated && 'cursor-pointer opacity-50 hover:opacity-70',
         isIdle && isSelected && 'bg-primary/5',
-        isDone && result?.success && 'bg-green-50 dark:bg-green-950/20',
-        isDone && result && !result.success && 'bg-red-50 dark:bg-red-950/20',
+        isDone && result && isSuccessfulResult(result) && 'bg-green-50 dark:bg-green-950/20',
+        isDone && result && isFailedResult(result) && 'bg-red-50 dark:bg-red-950/20',
+        isDone && result && isPendingResult(result) && 'bg-amber-50 dark:bg-amber-950/20',
       )}
     >
       {/* Status indicator */}
@@ -222,7 +229,7 @@ function PlatformRow({
       />
 
       {/* Platform name */}
-      <span className="text-sm flex-1 truncate">{platform.name}</span>
+      <span className="text-sm flex-1 truncate">{platform.name}{isIdle && platform.syncMode === 'editor' && <span className="ml-1 text-[10px] text-amber-700 dark:text-amber-400">需手动保存</span>}</span>
 
       {/* Right side info */}
       <RowInfo
@@ -234,6 +241,12 @@ function PlatformRow({
         result={result}
         progress={progress}
       />
+      {result && (isPendingResult(result) || result.warnings?.length) && (
+        <div className="basis-full pl-7 text-xs text-amber-700 dark:text-amber-400 space-y-1">
+          {isPendingResult(result) && <p>{result.message || '已填入编辑器，请检查并保存草稿'}</p>}
+          {result.warnings?.map((warning, index) => <p key={index}>{warning}</p>)}
+        </div>
+      )}
     </div>
   )
 }
@@ -256,7 +269,10 @@ function RowIndicator({
   result: SyncResult | null
 }) {
   if (result) {
-    return result.success ? (
+    if (isPendingResult(result)) {
+      return <Clock className="w-5 h-5 text-amber-600 flex-shrink-0" />
+    }
+    return isSuccessfulResult(result) ? (
       <div className="w-5 h-5 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
         <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
       </div>
@@ -309,7 +325,12 @@ function RowInfo({
 }) {
   // Done
   if (result) {
-    if (result.success && result.postUrl) {
+    if (isPendingResult(result)) {
+      return <span className="text-xs text-amber-700 dark:text-amber-400 flex-shrink-0">
+        {result.editorUrl ? <EditorLink result={result} /> : '待保存'}
+      </span>
+    }
+    if (isSuccessfulResult(result) && result.postUrl) {
       return (
         <span className="flex items-center gap-1 flex-shrink-0">
           {result.message && (
@@ -335,13 +356,13 @@ function RowInfo({
         </span>
       )
     }
-    if (!result.success) {
+    if (isFailedResult(result)) {
       return (
-        <span
-          className="text-xs text-red-500 dark:text-red-400 truncate max-w-[120px] flex-shrink-0"
-          title={result.error}
-        >
-          {result.error || '失败'}
+        <span className="flex items-center gap-2 text-xs text-red-500 dark:text-red-400 flex-shrink-0">
+          <span className="truncate max-w-[120px]" title={result.error}>
+            {result.error || '失败'}
+          </span>
+          <EditorLink result={result} />
         </span>
       )
     }
@@ -357,6 +378,7 @@ function RowInfo({
         : '上传图片',
       saving: '保存中',
       completed: '完成',
+      pending: '待保存',
       failed: '失败',
     }[progress.stage]
 

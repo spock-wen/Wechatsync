@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { summarizeSyncResults } from '@/lib/sync-result'
 import { ArticleCard } from './ArticleCard'
 import { PlatformList } from './PlatformList'
 import { PromoBanner } from './PromoBanner'
@@ -33,7 +34,7 @@ export function SyncDialog({
 }: SyncDialogProps) {
   const selectedSet = new Set(selectedPlatforms)
   const authenticatedPlatforms = platforms.filter(p => p.isAuthenticated)
-  const failedCount = results.filter(r => !r.success).length
+  const { success: successCount, pending: pendingCount, failed: failedCount } = summarizeSyncResults(results)
 
   const isIdle = status === 'idle' || status === 'loading'
   const isSyncing = status === 'syncing'
@@ -80,7 +81,7 @@ export function SyncDialog({
         )}
 
         {/* Share/review prompt — after sync completed */}
-        {isCompleted && <SharePrompt />}
+        {isCompleted && successCount > 0 && pendingCount === 0 && <SharePrompt />}
 
         {/* Error */}
         {error && (

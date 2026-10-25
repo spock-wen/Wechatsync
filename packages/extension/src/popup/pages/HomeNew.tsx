@@ -7,6 +7,7 @@ import { SyncDialog } from '@/components/sync-dialog'
 import type { Platform as DialogPlatform } from '@/components/sync-dialog'
 import { trackPageView, trackFeatureDiscovery } from '../../lib/analytics'
 import { createLogger } from '../../lib/logger'
+import { summarizeSyncResults } from '../../lib/sync-result'
 import { getCachedUpdateInfo, dismissUpdate, type UpdateCheckResult } from '../../lib/version-check'
 
 const logger = createLogger('HomeNew')
@@ -57,7 +58,7 @@ export function HomeNew() {
           setAllPlatforms(cached.platformListCache.map((p: any) => ({
             id: p.id, name: p.name, icon: p.icon,
             isAuthenticated: p.isAuthenticated, username: p.username,
-            homepage: p.homepage,
+            homepage: p.homepage, syncMode: p.syncMode,
           })))
         }
       } catch {}
@@ -85,7 +86,7 @@ export function HomeNew() {
       const mapped: DialogPlatform[] = (response.platforms || []).map((p: any) => ({
         id: p.id, name: p.name, icon: p.icon,
         isAuthenticated: p.isAuthenticated, username: p.username,
-        homepage: p.homepage,
+        homepage: p.homepage, syncMode: p.syncMode,
       }))
       setAllPlatforms(mapped)
       await loadPlatforms()
@@ -117,7 +118,7 @@ export function HomeNew() {
     startSync()
   }
 
-  const successCount = results.filter(r => r.success).length
+  const { success: successCount, pending: pendingCount } = summarizeSyncResults(results)
 
   return (
     <div className="flex flex-col h-[500px]">
@@ -266,7 +267,7 @@ export function HomeNew() {
       />
 
       {/* First sync success hint */}
-      {status === 'completed' && isFirstSync && successCount > 0 && (
+      {status === 'completed' && isFirstSync && successCount > 0 && pendingCount === 0 && (
         <div className="px-4 pb-3">
           <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-2.5 space-y-1.5">
             <p className="text-xs font-medium text-green-700 dark:text-green-400">

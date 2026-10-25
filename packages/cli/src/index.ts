@@ -706,7 +706,7 @@ program
       process.exit(1)
     }
 
-    // 处理本地图片：上传到第一个目标平台作为图床
+    // 处理本地图片：只选择声明支持图片上传的目标平台作为图床
     const fileDir = path.dirname(filePath)
     const localImages = findLocalImages(parsed.content, fileDir)
 
@@ -714,31 +714,40 @@ program
     let processedHtml = html
 
     if (localImages.length > 0) {
-      // 使用第一个目标平台作为图床
-      const imageHost = platforms[0]
-      console.log(chalk.bold(`发现 ${localImages.length} 张本地图片，上传到 ${imageHost}...`))
-      console.log()
+      let platformInfos: PlatformInfo[] = []
+      try {
+        platformInfos = await bridge.request<PlatformInfo[]>('listPlatforms')
+      } catch {
+        console.log(chalk.yellow('无法获取平台图片上传能力，将保留图片引用，请在投稿页检查并重新插入本地图片。'))
+      }
+      const imageHost = platforms.find((id: string) => platformInfos.some(info => info.id === id && info.capabilities?.includes('image_upload')))
+      if (!imageHost) {
+        console.log(chalk.yellow(`发现 ${localImages.length} 张本地图片，目标平台未提供图片上传能力。请在打开的编辑器中重新插入这些图片。`))
+      } else {
+        console.log(chalk.bold(`发现 ${localImages.length} 张本地图片，上传到 ${imageHost}...`))
+        console.log()
 
-      const imageResult = await processLocalImages(parsed.content, fileDir, bridge, imageHost)
+        const imageResult = await processLocalImages(parsed.content, fileDir, bridge, imageHost)
 
-      if (imageResult.uploadedCount > 0) {
-        // 更新内容
-        if (parsed.format === 'markdown') {
-          processedMarkdown = imageResult.content
-          processedHtml = markdownToHtml(imageResult.content)
-        } else {
-          processedHtml = imageResult.content
+        if (imageResult.uploadedCount > 0) {
+          // 更新内容
+          if (parsed.format === 'markdown') {
+            processedMarkdown = imageResult.content
+            processedHtml = markdownToHtml(imageResult.content)
+          } else {
+            processedHtml = imageResult.content
+          }
         }
-      }
 
-      console.log()
-      console.log(
-        `图片上传完成: ${chalk.green(imageResult.uploadedCount + ' 成功')}, ${chalk.red(imageResult.failedCount + ' 失败')}`
-      )
-      if (platforms.length > 1) {
-        console.log(chalk.gray(`(其他平台将从 ${imageHost} 图床转存)`))
+        console.log()
+        console.log(
+          `图片上传完成: ${chalk.green(imageResult.uploadedCount + ' 成功')}, ${chalk.red(imageResult.failedCount + ' 失败')}`
+        )
+        if (platforms.length > 1) {
+          console.log(chalk.gray(`(图片引用已替换为 ${imageHost} 的图片地址；编辑器平台仍需检查图片转存)`))
+        }
+        console.log()
       }
-      console.log()
     }
 
     const syncSpinner = ora('正在同步...').start()
@@ -761,8 +770,14 @@ program
       console.log(chalk.bold('同步结果:'))
       console.log()
 
+      const isPending = (result: SyncResult) => result.outcome === 'editor_filled' || result.outcome === 'needs_user_action'
+      const isSuccessful = (result: SyncResult) => !isPending(result) && result.outcome !== 'failed' && result.success
       for (const result of results) {
-        if (result.success) {
+        if (isPending(result)) {
+          console.log(chalk.yellow('  ◷'), chalk.bold(result.platform), chalk.yellow('(待保存)'))
+          console.log(`    ${result.message || '已填入编辑器，请检查并保存草稿'}`)
+          if (result.editorUrl) console.log(`    ${chalk.cyan(result.editorUrl)}`)
+        } else if (isSuccessful(result)) {
           console.log(
             chalk.green('  ✓'),
             chalk.bold(result.platform),
@@ -774,13 +789,17 @@ program
         } else {
           console.log(chalk.red('  ✗'), chalk.bold(result.platform))
           console.log(`    ${chalk.red(result.error || '未知错误')}`)
+          if (result.editorUrl) console.log(`    ${chalk.cyan(result.editorUrl)}`)
         }
+        for (const warning of result.warnings || []) console.log(`    ${chalk.yellow(warning)}`)
       }
 
-      const successCount = results.filter((r) => r.success).length
+      const successCount = results.filter(isSuccessful).length
+      const pendingCount = results.filter(isPending).length
+      const failedCount = results.length - successCount - pendingCount
       console.log()
       console.log(
-        `同步完成: ${chalk.green(successCount + ' 成功')}, ${chalk.red((results.length - successCount) + ' 失败')}`
+        `同步完成: ${chalk.green(successCount + ' 成功')}, ${chalk.yellow(pendingCount + ' 待保存')}, ${chalk.red(failedCount + ' 失败')}`
       )
     } catch (error) {
       syncSpinner.fail('同步失败')

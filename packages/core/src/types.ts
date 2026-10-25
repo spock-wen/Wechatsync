@@ -22,11 +22,23 @@ export interface Article {
 /**
  * 同步结果
  */
+export type SyncOutcome =
+  | 'editor_filled'
+  | 'draft_saved'
+  | 'published'
+  | 'needs_user_action'
+  | 'failed'
+
 export interface SyncResult {
   platform: string
+  /** 未完成保存的页面填充为 false；已有适配器保留历史行为。 */
   success: boolean
+  outcome?: SyncOutcome
   postId?: string
   postUrl?: string
+  editorUrl?: string
+  tabId?: number
+  warnings?: string[]
   draftOnly?: boolean  // 是否只保存了草稿
   error?: string
   message?: string  // 额外提示信息
@@ -65,6 +77,7 @@ export interface PlatformMeta {
   icon: string
   homepage: string
   capabilities: PlatformCapability[]
+  syncMode?: 'api' | 'editor' | 'hybrid'
 }
 
 /**

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X } from 'lucide-react'
 import { SyncDialog } from '@/components/sync-dialog'
+import { isFailedResult } from '@/lib/sync-result'
 import type { Platform, Article, SyncResult, PlatformProgress, DialogStatus } from '@/components/sync-dialog/types'
 
 const SELECTED_PLATFORMS_KEY = 'selectedPlatforms'
@@ -141,12 +142,12 @@ export function SyncDialogPage() {
   }
 
   const handleRetryFailed = () => {
-    const failed = results.filter(r => !r.success).map(r => r.platform)
+    const failed = results.filter(isFailedResult).map(r => r.platform)
     if (failed.length === 0 || !article) return
     const syncId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     setCurrentSyncId(syncId)
     setStatus('syncing')
-    setResults(prev => prev.filter(r => r.success))
+    setResults(prev => prev.filter(r => !isFailedResult(r)))
     setPlatformProgress(new Map())
 
     postToParent({

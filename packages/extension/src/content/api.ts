@@ -14,6 +14,8 @@
 
 import { htmlToMarkdownNative } from '@wechatsync/core'
 import { createLogger } from '../lib/logger'
+import { isPendingResult, isSuccessfulResult } from '../lib/sync-result'
+import type { SyncOutcome } from '@wechatsync/core'
 
 const logger = createLogger('Wechatsync')
 
@@ -41,6 +43,10 @@ interface AccountStatus {
   msg?: string;
   error?: string;
   editResp?: { draftLink?: string } | null;
+  outcome?: SyncOutcome;
+  editorUrl?: string;
+  tabId?: number;
+  warnings?: string[];
 }
 let currentAccounts: AccountStatus[] = [];
 
@@ -107,10 +113,15 @@ chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
         // 更新对应账户的状态
         const account = currentAccounts.find(a => a.type === result.platform);
         if (account) {
-          account.status = result.success ? 'done' : 'failed';
+          const pending = isPendingResult(result);
+          account.status = pending ? 'pending' : isSuccessfulResult(result) ? 'done' : 'failed';
+          account.outcome = result.outcome;
+          account.editorUrl = result.editorUrl;
+          account.tabId = result.tabId;
+          account.warnings = result.warnings;
           account.error = result.error;
-          account.msg = undefined;
-          account.editResp = result.success ? { draftLink: result.postUrl || result.url } : null;
+          account.msg = pending ? [result.message || '已填入编辑器，请检查并保存草稿', result.editorUrl, ...(result.warnings || [])].filter(Boolean).join('；') : result.message;
+          account.editResp = isSuccessfulResult(result) ? { draftLink: result.postUrl || result.url } : null;
         }
         // 发送完整的账户状态列表
         sendTaskUpdate({ accounts: currentAccounts });
@@ -123,10 +134,10 @@ chrome.runtime.onMessage.addListener((message, _sender, _sendResponse) => {
       // 更新对应账户的状态
       const account = currentAccounts.find(a => a.type === progress.platform);
       if (account) {
-        account.status = 'uploading';
+        account.status = progress.stage === 'pending' ? 'pending' : 'uploading';
         account.msg = progress.stage === 'uploading_images'
           ? `上传图片 ${progress.imageProgress?.current}/${progress.imageProgress?.total}`
-          : progress.stage === 'saving' ? '保存中...' : progress.stage;
+          : progress.stage === 'saving' ? '保存中...' : progress.stage === 'pending' ? '待保存草稿' : progress.stage;
       }
       // 发送完整的账户状态列表
       sendTaskUpdate({ accounts: currentAccounts });

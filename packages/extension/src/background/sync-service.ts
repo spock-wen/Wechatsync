@@ -10,10 +10,11 @@ import {
   getPlatformPreprocessConfigs,
   type SyncDetailProgress,
 } from '../adapters'
-import { DEFAULT_PREPROCESS_CONFIG, markdownToHtml } from '@wechatsync/core'
+import { DEFAULT_PREPROCESS_CONFIG, markdownToHtml, type SyncOutcome } from '@wechatsync/core'
 import * as wordpressAdapter from '../adapters/cms/wordpress'
 import * as metaweblogAdapter from '../adapters/cms/metaweblog'
 import { createLogger } from '../lib/logger'
+import { summarizeSyncResults } from '../lib/sync-result'
 
 const logger = createLogger('SyncService')
 
@@ -21,6 +22,10 @@ export interface SyncResult {
   platform: string
   platformName?: string
   success: boolean
+  outcome?: SyncOutcome
+  editorUrl?: string
+  tabId?: number
+  warnings?: string[]
   postUrl?: string
   draftOnly?: boolean
   message?: string
@@ -92,11 +97,12 @@ async function updateBadge(state: ActiveSyncState | null) {
   if (state.status === 'syncing') {
     await chrome.action.setBadgeText({ text: '' })
   } else if (state.status === 'completed') {
-    const successCount = state.results.filter(r => r.success).length
-    const total = state.selectedPlatforms.length
-    const failedCount = total - successCount
+    const { success: successCount, pending: pendingCount, failed: failedCount } = summarizeSyncResults(state.results)
 
-    if (failedCount === 0) {
+    if (pendingCount > 0) {
+      await chrome.action.setBadgeText({ text: '待存' })
+      await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLORS.partial })
+    } else if (failedCount === 0) {
       await chrome.action.setBadgeText({ text: '✓' })
       await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLORS.success })
     } else if (successCount === 0) {
@@ -427,8 +433,7 @@ export async function performSync(
     }
   }
 
-  const successCount = allResults.filter(r => r.success).length
-  const failedCount = allResults.length - successCount
+  const { failed: failedCount } = summarizeSyncResults(allResults)
   const finalStatus: SyncHistoryStatus =
     allResults.length === 0 && platforms.length > 0
       ? 'failed'

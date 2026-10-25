@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { SyncDialog } from '@/components/sync-dialog'
 import type { Platform, SyncResult, PlatformProgress } from '@/components/sync-dialog/types'
 import { createLogger } from '../lib/logger'
+import { isFailedResult } from '../lib/sync-result'
 
 const logger = createLogger('Editor')
 
@@ -191,7 +192,7 @@ export function EditorApp() {
   }
 
   const handleRetryFailed = () => {
-    const failedPlatforms = results.filter(r => !r.success).map(r => r.platform)
+    const failedPlatforms = results.filter(isFailedResult).map(r => r.platform)
     if (failedPlatforms.length === 0) return
 
     const editedArticle = getEditedArticle()
@@ -200,7 +201,7 @@ export function EditorApp() {
     const syncId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     setCurrentSyncId(syncId)
     setStatus('syncing')
-    setResults(prev => prev.filter(r => r.success))
+    setResults(prev => prev.filter(r => !isFailedResult(r)))
     setPlatformProgress(new Map())
 
     window.parent.postMessage(JSON.stringify({
